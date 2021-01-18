@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
+include(cmake/policy.cmake)
 include(cmake/compiler_find.cmake)
 find_c_fortran()
 
@@ -10,7 +11,13 @@ if(NOT DEFINED ${PROJECT_NAME}_BUILD_TESTING)
   set(${PROJECT_NAME}_BUILD_TESTING ${BUILD_TESTING})
 endif()
 
-if(NOT gemini_root)
+option(msis20 "build MSIS 2.0")
+
+if(msis20)
+  include(cmake/libraries.cmake)
+endif()
+
+if(NOT DEFINED gemini_root)
   if(DEFINED ENV{GEMINI_ROOT})
     set(gemini_root $ENV{GEMINI_ROOT})
   else()
@@ -22,12 +29,9 @@ endif()
 # otherwise add_subdirectory() may fail to find the path
 get_filename_component(gemini_root ${gemini_root} ABSOLUTE)
 
-set(msis_path ${gemini_root}/src/vendor/msis00)
+# --- build msis_setup executable
+add_subdirectory(${gemini_root}/src/vendor/msis00 ${PROJECT_BINARY_DIR}/msis)
 
-# --- build msis
+set_target_properties(msis_setup PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 
-add_subdirectory(${msis_path} ${PROJECT_BINARY_DIR}/msis)
-# this source_dir location is for Python
-# importlib.resources finds it.
-set_target_properties(msis_setup PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
+file(TOUCH ${PROJECT_BINARY_DIR}/__init__.py)

@@ -18,7 +18,7 @@ import json
 
 from . import find
 from . import mpi
-from .build import cmake_build
+from . import cmake
 from .hpc import hpc_batch_detect, hpc_batch_create
 from . import model
 from . import write
@@ -238,7 +238,7 @@ def get_gemini_exe(gemexe: Path = None) -> Path:
         gemexe = build_dir / gemexe.name
 
         if not gemexe.is_file():
-            cmake_build(
+            cmake.build(
                 src_dir,
                 build_dir,
                 run_test=False,
