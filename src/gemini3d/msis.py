@@ -2,14 +2,12 @@
 using MSIS Fortran exectuable from Python
 """
 
-import os
-import tempfile
 from pathlib import Path
 import numpy as np
 import subprocess
 import logging
 import typing as T
-import importlib.resources
+import h5py
 
 from . import cmake
 
@@ -34,21 +32,7 @@ def msis_setup(p: T.Dict[str, T.Any], xg: T.Dict[str, T.Any]) -> np.ndarray:
 
     """
 
-    msis_stem = "msis_setup"
-    msis_name = msis_stem
-    if os.name == "nt":
-        msis_name += ".exe"
-
-    msis_pipe = True
-
-    if not importlib.resources.is_resource(__package__, msis_name):
-        with importlib.resources.path(__package__, "CMakeLists.txt") as setup:
-            cmake.build(
-                setup.parent,
-                setup.parent / "build",
-                config_args=["-DBUILD_TESTING:BOOL=false"],
-                build_args=["--target", msis_stem],
-            )
+    msis_exe = cmake.build_gemini3d(Path("msis_setup"))
 
     # %% SPECIFY SIZES ETC.
     lx1 = xg["lx"][0]
@@ -67,75 +51,44 @@ def msis_setup(p: T.Dict[str, T.Any], xg: T.Dict[str, T.Any]) -> np.ndarray:
     # %% KLUDGE THE BELOW-ZERO ALTITUDES SO THAT THEY DON'T GIVE INF
     alt[alt <= 0] = 1
     # %% CREATE INPUT FILE FOR FORTRAN PROGRAM
-    if msis_pipe:
-        invals = (
-            f"{doy}\n{int(UTsec0)}\n{p['f107a']} {p['f107']} {p['Ap']} {p['Ap']}\n{lz}\n"
-            + " ".join(map(str, glat.ravel(order="C")))
-            + "\n"
-            + " ".join(map(str, glon.ravel(order="C")))
-            + "\n"
-            + " ".join(map(str, alt.ravel(order="C")))
-        )
-        # the "-" means to use stdin, stdout
-        args = ["-", "-", str(lz)]
-        stdout = subprocess.PIPE
-    else:
-        invals = None
-        # don't use NamedTemporaryFile because PermissionError on Windows
-        file_in = Path(tempfile.gettempdir(), "msis_setup_in.dat")
-        file_out = Path(tempfile.gettempdir(), "msis_setup_out.dat")
-        with file_in.open("w") as f:
-            np.array(doy).astype(np.int32).tofile(f)
-            np.array(UTsec0).astype(np.int32).tofile(f)
-            np.asarray([p["f107a"], p["f107"], p["Ap"], p["Ap"]]).astype(np.float32).tofile(f)
-            np.array(lz).astype(np.int32).tofile(f)
-            np.array(glat).astype(np.float32).tofile(f)
-            np.array(glon).astype(np.float32).tofile(f)
-            np.array(alt).astype(np.float32).tofile(f)
-        args = [str(file_in), str(file_out), str(lz)]
-        stdout = None
+    msis_infile = p.get("msis_infile", p["indat_size"].parent / "msis_setup_in.h5")
+    msis_outfile = p.get("msis_outfile", p["indat_size"].parent / "msis_setup_out.h5")
 
-    with importlib.resources.path("gemini3d.build", msis_name) as exe:
-        if "msis_version" in p:
-            args.append(str(p["msis_version"]))
-        cmd = [str(exe)] + args
-        logging.info(" ".join(cmd))
-        ret = subprocess.run(cmd, input=invals, stdout=stdout, text=True, cwd=exe.parent)
+    with h5py.File(msis_infile, "w") as f:
+        f["/doy"] = doy
+        f["/UTsec"] = UTsec0
+        f["/f107a"] = p["f107a"]
+        f["/f107"] = p["f107"]
+        f["/Ap"] = [p["Ap"]] * 7
+        # astype(float32) just to save disk I/O time/space
+        f["/glat"] = glat.astype(np.float32)
+        f["/glon"] = glon.astype(np.float32)
+        f["/alt"] = alt.astype(np.float32)
+    args = [str(msis_infile), str(msis_outfile), str(lz)]
+
+    if "msis_version" in p:
+        args.append(str(p["msis_version"]))
+    cmd = [str(msis_exe)] + args
+    logging.info(" ".join(cmd))
+    ret = subprocess.run(cmd, text=True, cwd=msis_exe.parent)
 
     if ret.returncode == 20:
         raise RuntimeError("Need to compile with 'cmake -Dmsis20=true'")
     if ret.returncode != 0:
         raise RuntimeError(f"MSIS failed to run: {ret.stdout}")
 
-    Nread = lz * 11
+    lsp = 7
+    natm = np.empty((lsp, lx1, lx2, lx3))
 
-    if msis_pipe:
-        msisdat = np.fromstring(ret.stdout, np.float32, Nread, sep=" ").reshape((11, lz), order="F")
-    else:
-        fout_size = file_out.stat().st_size
-        if fout_size != Nread * 4:
-            raise RuntimeError(f"expected {file_out} size {Nread*4} but got {fout_size}")
-        msisdat = np.fromfile(file_out, np.float32, Nread)
+    with h5py.File(msis_outfile, "r") as f:
+        nO = natm[0, ...] = f["/nO"][:]
+        natm[1, ...] = f["/nN2"][:]
+        nO2 = natm[2, ...] = f["/nO2"][:]
+        Tn = natm[3, ...] = f["/Tn"][:]
+        natm[4, ...] = f["/nN"][:]
+        natm[6, ...] = f["/nH"][:]
 
-    # %% ORGANIZE
-    # altitude is a useful sanity check as it's very regular and obvious.
-    alt_km = msisdat[0, :].reshape((lx1, lx2, lx3))
-    if not np.allclose(alt_km, alt, atol=0.02):  # atol due to precision of stdout ~0.01 km
-        raise ValueError("was msis_driver output parsed correctly?")
-
-    if not msis_pipe:
-        file_in.unlink()
-        file_out.unlink()
-
-    nO = msisdat[2, :].reshape((lx1, lx2, lx3))
-    nN2 = msisdat[3, :].reshape((lx1, lx2, lx3))
-    nO2 = msisdat[4, :].reshape((lx1, lx2, lx3))
-    Tn = msisdat[10, :].reshape((lx1, lx2, lx3))
-    nN = msisdat[8, :].reshape((lx1, lx2, lx3))
-
-    nNO = 0.4 * np.exp(-3700 / Tn) * nO2 + 5e-7 * nO
     # Mitra, 1968
-    nH = msisdat[7, :].reshape((lx1, lx2, lx3))
-    natm = np.stack((nO, nN2, nO2, Tn, nN, nNO, nH), 0)
+    natm[5, ...] = 0.4 * np.exp(-3700 / Tn) * nO2 + 5e-7 * nO  # nNO
 
     return natm

@@ -11,14 +11,17 @@ import gemini3d.msis as gp
 
 
 @pytest.mark.parametrize("version", [0, 20])
-def test_msis(version):
+def test_msis(version, tmp_path):
     cfg = {
         "time": [datetime(2015, 1, 2, 12)],
         "f107": 100.0,
         "f107a": 100.0,
         "Ap": 4,
         "msis_version": version,
+        "indat_size": tmp_path / "inputs/simsize.h5",
     }
+
+    (tmp_path / "inputs").mkdir(exist_ok=True)
 
     lx = [4, 2, 3]
 

@@ -2,10 +2,14 @@ import typing as T
 from pathlib import Path
 import subprocess
 import shutil
+import json
+import os
 import tempfile
 import importlib.resources
 
+from .. import PYGEMINI_ROOT
 from ..utils import get_cpu_count
+from ..prereqs import git_download
 
 __all__ = ["exe", "build", "find_library"]
 
@@ -111,3 +115,49 @@ project(dummy LANGUAGES C Fortran)
         pass
 
     return ret.returncode == 0
+
+
+def build_gemini3d(target: Path) -> Path:
+    """
+    build targets from gemini3d program
+
+    Specify environemnt variable GEMINI_ROOT to reuse existing development code
+    """
+    src_dir = None
+    if os.environ.get("GEMINI_ROOT"):
+        src_dir = Path(os.environ["GEMINI_ROOT"]).expanduser()
+
+    if not src_dir or not src_dir.is_dir():
+        if target.parents[1].is_dir() and (target.parents[1] / "CMakeLists.txt").is_file():
+            src_dir = target.parents[1]
+        else:
+            # clone Gemini3D and do a test build
+
+            src_dir = PYGEMINI_ROOT / "gemini-fortran"
+
+            jmeta = json.loads(importlib.resources.read_text(__package__, "libraries.json"))
+            git_download(src_dir, repo=jmeta["gemini3d"]["url"], tag=jmeta["gemini3d"]["tag"])
+
+    if not src_dir.is_dir():
+        raise NotADirectoryError(f"could not find Gemini3D source directory {src_dir}")
+
+    build_dir = src_dir / "build"
+    exe = shutil.which(target.name, path=build_dir)
+
+    if not exe:
+        build_args = ["--target", target.name]
+
+        build(
+            src_dir,
+            build_dir,
+            run_test=False,
+            install=False,
+            config_args=["-DBUILD_TESTING:BOOL=false"],
+            build_args=build_args,
+        )
+        exe = shutil.which(target.name, path=build_dir)
+
+    if not exe:
+        raise RuntimeError(f"{target.name} not found in {build_dir}")
+
+    return Path(exe)
