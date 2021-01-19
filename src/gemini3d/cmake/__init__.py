@@ -146,7 +146,7 @@ def build_gemini3d(target: Path) -> Path:
         raise NotADirectoryError(f"could not find Gemini3D source directory {src_dir}")
 
     build_dir = src_dir / "build"
-    exe = shutil.which(target.name, path=build_dir)
+    exe = shutil.which(target.name, path=str(build_dir))
 
     if not exe:
         build_args = ["--target", target.name]
@@ -159,7 +159,7 @@ def build_gemini3d(target: Path) -> Path:
             config_args=["-DBUILD_TESTING:BOOL=false"],
             build_args=build_args,
         )
-        exe = shutil.which(target.name, path=build_dir)
+        exe = shutil.which(target.name, path=str(build_dir))
 
     if not exe:
         raise RuntimeError(f"{target.name} not found in {build_dir}")
