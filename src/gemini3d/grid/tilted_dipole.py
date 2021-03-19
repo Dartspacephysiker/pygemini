@@ -26,6 +26,8 @@ def tilted_dipole3d(cfg: dict[str, T.Any]) -> dict[str, T.Any]:
         simulation grid
     """
 
+    pi = math.pi
+
     # arrange the grid data in a dictionary
     xg = {"lx": np.array([cfg["lq"], cfg["lp"], cfg["lphi"]])}  # aggregate array shape variable
 
@@ -41,7 +43,7 @@ def tilted_dipole3d(cfg: dict[str, T.Any]) -> dict[str, T.Any]:
     # find the "corners" of the grid in the source hemisphere
     thetax2max = thetad + math.radians(cfg["dtheta"] / 2)
     thetax2min = thetad - math.radians(cfg["dtheta"] / 2)
-    if thetad < np.pi / 2:  # northern hemisphere
+    if thetad < pi / 2:  # northern hemisphere
         pmax: float = (Re + cfg["altmin"]) / Re / np.sin(thetax2min) ** 2
         # bottom left grid point p
         qtmp = (Re / (Re + cfg["altmin"])) ** 2 * np.cos(
@@ -61,18 +63,18 @@ def tilted_dipole3d(cfg: dict[str, T.Any]) -> dict[str, T.Any]:
 
     # find the max zenith angle (theta) for the grid, need to detect grid type and henmisphere
     if cfg["gridflag"] == 0:  # open dipole grid
-        if thetad < np.pi / 2:  # northern hemisphere
-            thetamax = thetax2min + np.pi / 100
+        if thetad < pi / 2:  # northern hemisphere
+            thetamax = thetax2min + pi / 100
         else:  # southern hemisphere
-            thetamax = thetax2max - np.pi / 100
+            thetamax = thetax2max - pi / 100
     else:  # closed dipole grid, reflect theta about equator
-        if thetad < np.pi / 2:  # northern
-            thetamax = np.pi - thetax2min
+        if thetad < pi / 2:  # northern
+            thetamax = pi - thetax2min
         else:  # southern
-            thetamax = np.pi - thetax2max
+            thetamax = pi - thetax2max
 
     # find the min/max q values for the grid across both hemispheres
-    if thetad < np.pi / 2:
+    if thetad < pi / 2:
         rmin = p[-3] * Re * np.sin(thetax2min) ** 2  # last field line contains min/max r/q vals.
         rmax = p[-3] * Re * np.sin(thetamax) ** 2
         qmin = np.cos(thetax2min) * Re ** 2 / rmin ** 2
@@ -262,7 +264,7 @@ def tilted_dipole3d(cfg: dict[str, T.Any]) -> dict[str, T.Any]:
     else:  # closed dipole
         Imathalf = Imat[0 : int(np.floor(cfg["lq"] / 2)), :, :]
         xg["I"] = np.average(Imathalf, axis=0)
-    xg["I"] = 90 - np.rad2deg(np.minimum(xg["I"], np.pi - xg["I"]))
+    xg["I"] = 90 - np.rad2deg(np.minimum(xg["I"], pi - xg["I"]))
     # ignore parallel vs. anti-parallel
 
     # compute gravitational field components, exclude ghost cells
@@ -278,14 +280,8 @@ def tilted_dipole3d(cfg: dict[str, T.Any]) -> dict[str, T.Any]:
 
     # compute magnetic field strength
     print(" tilted_dipole3d:  calculating magnetic field strength over grid...")
-    xg["Bmag"] = (
-        (4 * np.pi * 1e-7)
-        * 7.94e22
-        / 4
-        / np.pi
-        / (r[2:-2, 2:-2, 2:-2] ** 3)
-        * np.sqrt(3 * (np.cos(theta[2:-2, 2:-2, 2:-2])) ** 2 + 1)
-    )
+    # simplified (4 * pi * 1e-7)* 7.94e22 / 4 / pi due to precision issues
+    xg["Bmag"] = 7.94e15 / (r[2:-2, 2:-2, 2:-2] ** 3) * np.sqrt(3 * (np.cos(theta[2:-2, 2:-2, 2:-2])) ** 2 + 1)
 
     # compute Cartesian coordinates
     xg["z"] = r[2:-2, 2:-2, 2:-2] * np.cos(theta[2:-2, 2:-2, 2:-2])
