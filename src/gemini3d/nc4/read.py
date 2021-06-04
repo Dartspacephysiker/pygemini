@@ -211,13 +211,8 @@ def frame3d_curv(file: Path, var: set[str]) -> xarray.Dataset:
     if Dataset is None:
         raise ImportError("netcdf missing or broken")
 
-    lxs = simsize(file.parent)
-
     p4 = (0, 3, 2, 1)
-    if lxs[2] == 1:  # east-west
-        p3 = (2, 0, 1)
-    else:  # 3D or north-south, no swap
-        p3 = (2, 1, 0)
+    p3 = (2, 1, 0)
 
     with Dataset(file, "r") as f:
         if {"ne", "ns", "v1", "Ti"} & var:
@@ -267,12 +262,7 @@ def frame3d_curvavg(file: Path, var: set[str]) -> xarray.Dataset:
     if Dataset is None:
         raise ImportError("netcdf missing or broken")
 
-    lxs = simsize(file.parent)
-
-    if lxs[2] == 1:  # east-west
-        p3 = (2, 0, 1)
-    else:  # 3D or north-south, no swap
-        p3 = (2, 1, 0)
+    p3 = (2, 1, 0)
 
     v2n = {
         "ne": "neall",

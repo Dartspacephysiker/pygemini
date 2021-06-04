@@ -197,12 +197,7 @@ def frame3d_curvne(file: Path) -> xarray.Dataset:
     xg = grid(file.parent, var={"x1", "x2", "x3"})
     dat = xarray.Dataset(coords={"x1": xg["x1"][2:-2], "x2": xg["x2"][2:-2], "x3": xg["x3"][2:-2]})
 
-    lxs = simsize(file.parent)
-
-    if lxs[2] == 1:  # east-west
-        p3 = (2, 0, 1)
-    else:  # 3D or north-south, no swap
-        p3 = (2, 1, 0)
+    p3 = (2, 1, 0)
 
     with h5py.File(file, "r") as f:
         dat["ne"] = (("x1", "x2", "x3"), f["/ne"][:].transpose(p3))
@@ -235,26 +230,10 @@ def frame3d_curv(file: Path, var: set[str]) -> xarray.Dataset:
 
     lxs = simsize(file.parent)
 
-    p4s = (0, 3, 1, 2)  # only for Gemini < 0.10.0
-    p3s = (2, 0, 1)
-    p4n = (0, 3, 2, 1)
-    p3n = (2, 1, 0)
+    p4 = (0, 3, 2, 1)
+    p3 = (2, 1, 0)
 
     with h5py.File(file, "r") as f:
-
-        if lxs[1] == 1 or file.name == "initial_conditions.h5":
-            p4 = p4n
-            p3 = p3n
-        elif lxs[2] == 1:  # east-west
-            if f["/nsall"].shape[2] == 1:  # old, Gemini < 0.10.0 data
-                p4 = p4s
-                p3 = p3s
-            else:  # Gemini >= 0.10.0
-                p4 = p4n
-                p3 = p3n
-        else:  # 3D
-            p4 = p4n
-            p3 = p3n
 
         if {"ne", "ns", "v1", "Ti"} & var:
             dat["ns"] = (("species", "x1", "x2", "x3"), f["/nsall"][:].transpose(p4))
@@ -280,8 +259,6 @@ def frame3d_curv(file: Path, var: set[str]) -> xarray.Dataset:
                 else:
                     Phiall = Phiall[:, None]
 
-            if all(Phiall.shape == lxs[1:][::-1]):
-                Phiall = Phiall.transpose()  # Gemini < 0.10.0
             dat["Phitop"] = (("x2", "x3"), Phiall)
 
     return dat
