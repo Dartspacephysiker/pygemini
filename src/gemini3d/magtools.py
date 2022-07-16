@@ -90,13 +90,16 @@ def makegrid(
 
 
 def magframe(
-    filename: str | Path, *, cfg: dict[str, T.Any] = None, time: datetime = None
+        filename: str | Path, *,
+        fieldpoints_fname: str | Path = 'magfieldpoints.h5', 
+        cfg: dict[str, T.Any] = None,
+        time: datetime = None
 ) -> dict[str, T.Any]:
     """
     # example use
-    # dat = gemini3d.read.magframe(filename)
-    # dat = gemini3d.read.magframe(folder, "time", datetime)
-    # dat = gemini3d.read.magframe(filename, "config", cfg)
+    # dat = gemini3d.magtools.magframe(filename)
+    # dat = gemini3d.magtools.magframe(folder, "time", datetime)
+    # dat = gemini3d.magtools.magframe(filename, "config", cfg)
 
     Translated from magframe.m
     2022/07/05
@@ -123,7 +126,7 @@ def magframe(
         cfg = read.config(direc)
 
     # load and construct the magnetic field point grid
-    fnp = direc / "inputs/magfieldpoints.h5"
+    fnp = direc / ("inputs/" + fieldpoints_fname)
     assert fnp.is_file(), f"{fnp} not found"
 
     with h5py.File(fnp, "r") as f:
